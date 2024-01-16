@@ -114,12 +114,28 @@ class genPartFilter : public edm::stream::EDFilter<> {
       TH1D* ratio;
       TTree* Process;
 
-    int nWbHt;
-    int nWbZt;
-    int nWbWb;
-    int nHtZt;
-    int nHtHt;
-    int nZtZt;
+    int nWbHt = 0;
+    int nWbZt = 0;
+    int nWbWb = 0;
+    int nHtZt = 0;
+    int nHtHt = 0;
+    int nZtZt = 0;
+
+    int total = 0;
+
+   double nWbWbRatio = 0.0;
+   double nHtZtRatio = 0.0;
+   double nHtHtRatio = 0.0;
+   double nZtZtRatio = 0.0;
+   double nWbHtRatio = 0.0;
+   double nWbZtRatio = 0.0;
+
+   int incWbWb = 0;
+   int incHtHt = 0;
+   int incZtZt = 0;
+   int incWbZt = 0;
+   int incWbHt = 0;
+   int incHtZt = 0;
 
 
       //virtual void beginRun(edm::Run const&, edm::EventSetup const&) override;
@@ -158,13 +174,13 @@ Process->Branch("nHtZt", &nHtZt ,"nHtZt/I");
 Process->Branch("nWbZt", &nWbZt, "nWbZt/I");
 Process->Branch("nWbHt", &nWbHt, "nWbHt/I");
 
-HtHt = fs->make<TH1D>("HtHt", "HtHt", 100, 0, 100);
-ZtZt = fs->make<TH1D>("ZtZt", "ZtZt", 100, 0, 100);
-WbWb = fs->make<TH1D>("WbWb", "WbWb", 100, 0, 100);
-HtZt = fs->make<TH1D>("HtZt", "HtZt", 100, 0, 100);
-WbZt = fs->make<TH1D>("WbZt", "WbZt", 100, 0, 100);
-WbHt = fs->make<TH1D>("WbHt", "WbHt", 100, 0, 100);
-ratio = fs->make<TH1D>("ratio", "ratio of processes", 1, 0, 1);
+HtHt = fs->make<TH1D>("HtHt", "HtHt", 3000, 0, 3000);
+ZtZt = fs->make<TH1D>("ZtZt", "ZtZt", 3000, 0, 3000);
+WbWb = fs->make<TH1D>("WbWb", "WbWb", 3000, 0, 3000);
+HtZt = fs->make<TH1D>("HtZt", "HtZt", 3000, 0, 3000);
+WbZt = fs->make<TH1D>("WbZt", "WbZt", 3000, 0, 3000);
+WbHt = fs->make<TH1D>("WbHt", "WbHt", 3000, 0, 3000);
+ratio = fs->make<TH1D>("ratio", "ratio of processes", 100, 0, 1);
 
 }
 
@@ -220,21 +236,12 @@ genPartFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
    int nhGlu = 0;
    int nhWq = 0;
    int nhZq = 0;
-
-     nWbHt = 0;
-     nWbZt = 0;
-     nWbWb = 0;
-     nHtZt = 0;
-     nHtHt = 0;
-     nZtZt = 0;
-
-   int total = 0;
-   double nWbHtRatio = 0.0;
-   double nWbZtRatio = 0.0;
-   double nWbWbRatio = 0.0;
-   double nHtZtRatio = 0.0;
-   double nHtHtRatio = 0.0;
-   double nZtZtRatio = 0.0;
+//just for straight up checking inclusive interactions
+   int nSuub_ = 0;
+   int nW_   = 0;
+   int ntop_ = 0;
+   int nH_   = 0;
+   int nZ_    = 0;
 
 
 
@@ -255,7 +262,19 @@ genPartFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
    std::vector<reco::GenParticle> genPart = *genPartCollection.product(); 
 //want only fully hadronic events_
    for (auto iG = genPartCollection->begin(); iG != genPartCollection->end(); iG++) 
-   { if ((abs(iG->pdgId())==24)&&((abs(iG->mother()->pdgId())==chi_pdgid)) )
+   { 
+if ((abs(iG->pdgId()) == 24) && (abs(iG->mother()->pdgId()) == chi_pdgid)) nW_++;
+if ((abs(iG->pdgId()) == 5) && (abs(iG->mother()->pdgId()) == chi_pdgid)) nSuub_++;
+if ((abs(iG->pdgId()) == 23) && (abs(iG->mother()->pdgId()) == chi_pdgid)) nZ_++;
+if ((abs(iG->pdgId()) == 6) && (abs(iG->mother()->pdgId()) == chi_pdgid)) ntop_++;
+if ((abs(iG->pdgId()) == 25) && (abs(iG->mother()->pdgId()) == chi_pdgid)) nH_++;
+
+
+
+
+
+//original
+if ((abs(iG->pdgId())==24)&&((abs(iG->mother()->pdgId())==chi_pdgid)) )
       {
          genChiWb.push_back( TLorentzVector(iG->mother()->px(),iG->mother()->py(),iG->mother()->pz(),iG->mother()->energy())  );
          const reco::Candidate* W_final = parse_chain(iG->clone());
@@ -383,11 +402,10 @@ genPartFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
       */
       //else if  ((abs(iG->pdgId()) == chi_pdgid) && (iG->isLastCopy())) nChi++;
   
-std::cout<<"before } nH:"<<nH<<std::endl;
 
 
 }
-std::cout<<"after } nH:"<<nH<<std::endl;
+
 
    //std::cout << "----------------------end event --------------------------------" << std::endl;
    bool _htWb = false;
@@ -430,18 +448,38 @@ std::cout<<"after } nH:"<<nH<<std::endl;
       nHtZt++;
    } 
 
-   std::cout<<"ZtZt:"<<nZtZt<<"HtZt:"<<nHtZt<<"WbZt:"<<nWbZt<<"WbWb:"<<nWbWb<<std::endl;
-   total = nHtHt + nZtZt + nWbWb + nWbHt + nWbZt +nHtZt;
-   std::cout<<total<<std::endl;
-   nWbHtRatio = nWbHt/total;
-   nWbZtRatio = nWbZt/total;
-   nWbWbRatio = nWbWb/total;
-   nHtZtRatio = nHtZt/total;
-   nHtHtRatio = nHtHt/total; 
-   nZtZtRatio = nZtZt/total;
+   else if ((nSuub_ == 2) && (nW_ == 2))
+   {
+      incWbWb++;
+   }
+
+   else if ((nSuub_ == 1) && (nW_ == 1) && (nZ_ == 1) && (ntop_ ==1))
+   {
+      incWbZt++;
+   }
+   else if ((nSuub_ == 1) && (nW_ == 1) && (nH_ == 1) && (ntop_ ==1))
+   {
+      incWbHt++;
+   }
+   else if ((nZ_ == 2) && (ntop_ ==2))
+   {
+      incZtZt++;
+   }
+
+   else if ((nH_ == 2) && (ntop_ ==2))
+   {
+      incHtHt++;
+   }
+   else if ((nZ_ == 1) && (ntop_ ==2) && (nH_ == 1))
+   {
+      incHtZt++;
+   }
+ 
+
+   total++;
 
      
-   //std::cout << "nHtHt " << nHtHt<< " nWbWb "<< nWbWb<< " nZtZt " << nZtZt<< " nWbHt " << nWbHt<< " nWbZt " << nWbZt<< " nHtZt" << nHtZt << std::endl;
+  // std::cout << "nHtHt " << nHtHt<< " nWbWb "<< nWbWb<< " nZtZt " << nZtZt<< " nWbHt " << nWbHt<< " nWbZt " << nWbZt<< " nHtZt" << nHtZt <<"total:"<<total<< std::endl;
   /* 
    //if ( (nH==0)&&(ntop>0)    )
    //{
@@ -494,30 +532,6 @@ std::cout<<"after } nH:"<<nH<<std::endl;
    }  
 */
 
-   //push the variables
-   numHtHt.push_back(nHtHt);
-   numZtZt.push_back(nZtZt);
-   numWbWb.push_back(nWbWb);
-   numHtZt.push_back(nHtZt);
-   numWbZt.push_back(nWbZt);
-   numWbHt.push_back(nWbHt);
-
-   //Fill the histogram with values
-   HtHt->Fill(nHtHt);
-   ZtZt->Fill(nZtZt);
-   WbWb->Fill(nWbWb);
-   HtZt->Fill(nHtZt);
-   WbZt->Fill(nWbZt);
-   WbHt->Fill(nWbHt);
-   ratio->Fill(nHtHtRatio);
-   ratio->Fill(nZtZtRatio);
-   ratio->Fill(nWbWbRatio);
-   ratio->Fill(nHtZtRatio);
-   ratio->Fill(nWbZtRatio);
-   ratio->Fill(nWbHtRatio);
-
-   //Fill the tree
-   Process->Fill();
 
    //if(!_ZtZt)return false;
    if (! ( _htWb || _htZt || _ZtWb || _WbWb || _htht || _ZtZt)  ) return false;
@@ -536,7 +550,36 @@ genPartFilter::beginStream(edm::StreamID)
 // ------------ method called once each stream after processing all runs, lumis and events  ------------
 void
 genPartFilter::endStream() {
+   numHtHt.push_back(nHtHt);
+   numZtZt.push_back(nZtZt);
+   numWbWb.push_back(nWbWb);
+   numHtZt.push_back(nHtZt);
+   numWbZt.push_back(nWbZt);
+   numWbHt.push_back(nWbHt);
+   nHtHtRatio = nHtHt/total;
+nZtZtRatio = nZtZt/total;
+nWbWbRatio = nWbWb/total;
+nHtZtRatio = nHtZt/total;
+nWbZtRatio = nWbZt/total;
+nWbHtRatio = nWbHt/total;
+   //Fill the histogram with values
+   HtHt->Fill(nHtHt);
+   ZtZt->Fill(nZtZt);
+   WbWb->Fill(nWbWb);
+   HtZt->Fill(nHtZt);
+   WbZt->Fill(nWbZt);
+   WbHt->Fill(nWbHt);
+   ratio->Fill(nHtHtRatio);
+   ratio->Fill(nZtZtRatio);
+   ratio->Fill(nWbWbRatio);
+   ratio->Fill(nHtZtRatio);
+   ratio->Fill(nWbZtRatio);
+   ratio->Fill(nWbHtRatio);
+   //Fill the tree
+   Process->Fill();
+ std::cout<<"endStream"<< "nHtHt " << nHtHt<< " nWbWb "<< nWbWb<< " nZtZt " << nZtZt<< " nWbHt " << nWbHt<< " nWbZt " << nWbZt<< " nHtZt" << nHtZt <<"total:"<<total<<std::endl;  
 
+std::cout<<"inclusive branching ratio:::: "<<"WbWb="<<incWbWb<<", ZtZt="<<incZtZt<<", HtHt="<<incHtHt<<", WbHt="<<incWbHt<<", WbZt="<<incWbZt<<", HtZt="<<incHtZt<<std::endl;
 }
 
 // ------------ method called when starting to processes a run  ------------

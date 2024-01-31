@@ -91,6 +91,9 @@ jetAnalyzer::jetAnalyzer(const edm::ParameterSet& iConfig)
    //the way this works for arrays is that you have to tell the tree how many values you want to save per event (for example, AK8_pt saves nAK8 values each event, one for each AK8 jet, and nAK8 must also be a tree variable)
    tree = fs->make<TTree>("tree", "tree");
    tree->Branch("nAK8", &nAK8, "nAK8/I");
+   tree->Branch("nAK8particle", &nAK8particle, "nAK8particle/I");
+   tree->Branch("nCOMparticle", &nCOMparticle, "nCOMparticle/I");
+
    tree->Branch("event_HT", &event_HT, "event_HT/D"); //the "D" is because this is a double type.
 
    tree->Branch("AK8_pt", AK8_pt, "AK8_pt[nAK8]/D");
@@ -133,11 +136,19 @@ void jetAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
 
    for(auto iJet = fatJets->begin(); iJet != fatJets->end(); iJet++)         ////////Over AK8 Jets
    {
-      if( (iJet->pt() > 300.) && (abs(iJet->eta())< 2.5) ) continue;   //make a cut to AK8 jets
-      if( (iJet->neutralHadronEnergyFraction() < 0.90) && (iJet->neutralEmEnergyFraction() < 0.90) && (iJet->muonEnergyFraction() < 0.80) && (iJet->chargedHadronEnergyFraction() > 0) && (iJet->chargedEmEnergyFraction() < 0.80) && (iJet->chargedMultiplicity() > 0) && ((iJet->chargedMultiplicity())+(iJet->neutralMultiplicity()) > 1) ) continue;    //jet ID
-      AK8_mass[nAK8] = iJet->mass(); // save some quantities of the large jets
-      AK8_pt[nAK8] = iJet->pt();
-      AK8_eta[nAK8] = iJet->eta();
+      pat::Jet Jet(*iJet);
+      std::cout <<"is iJet PF Jet: " <<iJet->isPFJet()<<",   is Jet PF Jet:  " << Jet.isPFJet() << std::endl;
+      if (Jet.isPFJet() == 0) {std::cout << Jet.eta() <<std::endl; } 
+      if (!Jet.isPFJet()) continue;
+      if( (Jet.pt() > 300.) && (abs(Jet.eta())< 2.5) ) continue;   //make a cut to AK8 jets
+      std::cout << "passed AK8 Jet cut" << std::endl;
+
+      if( (Jet.neutralHadronEnergyFraction() < 0.90) && (Jet.neutralEmEnergyFraction() < 0.90) && (Jet.muonEnergyFraction() < 0.80) && (Jet.chargedHadronEnergyFraction() > 0) && (Jet.chargedEmEnergyFraction() < 0.80) && (Jet.chargedMultiplicity() > 0)  && (Jet.numberOfDaughters() > 1) ) continue;    //jet ID
+      std::cout << "passed Jet ID cut" << std::endl;
+
+      AK8_mass[nAK8] = Jet.mass(); // save some quantities of the large jets
+      AK8_pt[nAK8] = Jet.pt();
+      AK8_eta[nAK8] = Jet.eta();
 
       if(nAK8<2)
       {
@@ -185,10 +196,12 @@ void jetAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
      {
         const reco::Candidate* parti = iJet->daughter(i);
         TLorentzVector Boosted;
-        double newpx = (parti->px())-((parti->energy())*(COM.Px())); //px' = px-m*V_c
-        double newpy = (parti->py())-((parti->energy())*(COM.Py())); //px' = px-m*V_c
-        double newpz = (parti->pz())-((parti->energy())*(COM.Pz())); //px' = px-m*V_c
-        double newE = parti->energy();
+        const pat::PackedCandidate* candParti = (pat::PackedCandidate*) parti; //type casting to use puppi weight method
+        double puppiweight = candParti->puppiWeight();
+        double newpx = (parti->px())*puppiweight-(parti->energy())*puppiweight*(COM.Px()); //px' = px-m*V_c
+        double newpy = (parti->py())*puppiweight-(parti->energy())*puppiweight*(COM.Py()); //px' = px-m*V_c
+        double newpz = (parti->pz())*puppiweight-(parti->energy())*puppiweight*(COM.Pz()); //px' = px-m*V_c
+        double newE = (parti->energy())*puppiweight;
         Boosted.SetPxPyPzE(newpx, newpy, newpz, newE);
         COM4vectors.push_back(Boosted);
 

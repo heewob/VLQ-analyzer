@@ -137,13 +137,13 @@ void jetAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
    for(auto iJet = fatJets->begin(); iJet != fatJets->end(); iJet++)         ////////Over AK8 Jets
    {
       pat::Jet Jet(*iJet);
-      std::cout <<"is iJet PF Jet: " <<iJet->isPFJet()<<",   is Jet PF Jet:  " << Jet.isPFJet() << std::endl;
+      //std::cout <<"is iJet PF Jet: " <<iJet->isPFJet()<<",   is Jet PF Jet:  " << Jet.isPFJet() << std::endl;
       if (Jet.isPFJet() == 0) {std::cout << Jet.eta() <<std::endl; } 
       if (!Jet.isPFJet()) continue;
-      if( (Jet.pt() > 300.) && (abs(Jet.eta())< 2.5) ) continue;   //make a cut to AK8 jets
+      if( (Jet.pt() < 300.) || (abs(Jet.eta()) > 2.5) ) continue;   //make a cut to AK8 jets
       std::cout << "passed AK8 Jet cut" << std::endl;
 
-      if( (Jet.neutralHadronEnergyFraction() < 0.90) && (Jet.neutralEmEnergyFraction() < 0.90) && (Jet.muonEnergyFraction() < 0.80) && (Jet.chargedHadronEnergyFraction() > 0) && (Jet.chargedEmEnergyFraction() < 0.80) && (Jet.chargedMultiplicity() > 0)  && (Jet.numberOfDaughters() > 1) ) continue;    //jet ID
+      if( (Jet.neutralHadronEnergyFraction() >= 0.90) || (Jet.neutralEmEnergyFraction() >= 0.90) || (Jet.muonEnergyFraction() >= 0.80) || (Jet.chargedHadronEnergyFraction() <= 0) || (Jet.chargedEmEnergyFraction() >= 0.80) || (Jet.chargedMultiplicity() <= 0)  || (Jet.numberOfDaughters() <= 1) ) continue;    //jet ID
       std::cout << "passed Jet ID cut" << std::endl;
 
       AK8_mass[nAK8] = Jet.mass(); // save some quantities of the large jets
@@ -186,6 +186,7 @@ void jetAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
         PUPPI_E[nAK8particle] = weighted4vec.E();
    
         nAK8particle++;  
+        //std::cout << "nAK8particle++" << nAK8particle << std::endl;
      }
 
      //calculate COM 4vector

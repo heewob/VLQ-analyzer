@@ -214,11 +214,11 @@ void jetAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
   
         nCOMparticle++;
      }
-
+   }
    //here you've reached the end of the event, so this will create a new entry in your tree (representing the event) and fills the branches you created above.
    tree->Fill();
 
-  }
+  
 }
 DEFINE_FWK_MODULE(jetAnalyzer);
 

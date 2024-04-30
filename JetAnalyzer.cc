@@ -33,6 +33,7 @@
 #include "TLorentzVector.h"
 #include "TVector3.h"
 #include "DataFormats/Candidate/interface/Candidate.h"
+#include "DataFormats/Math/interface/Vector3D.h"
 #include  "DataFormats/PatCandidates/interface/PackedCandidate.h"
 #include <algorithm>
 #include "FWCore/Framework/interface/EDProducer.h"
@@ -41,6 +42,9 @@
 #include <DataFormats/Math/interface/deltaR.h>
 #include "FWCore/MessageLogger/interface/MessageLogger.h"
 #include <string>
+#include "DataFormats/Candidate/interface/LeafCandidate.h"
+#include "/uscms/home/hwchung/nobackup/testAnalysis/CMSSW_10_6_29/src/sortJets.h"
+#include <TCanvas.h>
 using namespace reco;
 
 
@@ -66,12 +70,54 @@ private:
    double AK8_pt[100], AK8_eta[100], AK8_mass[100];
    double PUPPI_px[1000], PUPPI_py[1000], PUPPI_pz[1000], PUPPI_E[1000];
    double COM_px[1000], COM_py[1000], COM_pz[1000], COM_E[1000]; 
-  
+
+   int recluster_multiplicity;
+   double recluster_energy[1000], recluster_mass[1000];
+    
+   std::vector<double> sortMass;    
+
    //create a vector for 4 vectors
    std::vector<TLorentzVector> particle4vectors;
    std::vector<TLorentzVector> COM4vectors;
-   
+   std::vector<fastjet::PseudoJet> PseudoJetvectors;
+   std::vector<TLorentzVector> superjet_pos;
+   std::vector<TLorentzVector> superjet_neg;  
+   std::vector<TLorentzVector> leftoverjet;
+
 };
+
+//convert Pseudojet to Candidate (to be precise, a concrete subclass of reco::Candidate i.e. reco::LeafCandidate)
+reco::LeafCandidate convertPseudoJetToCandidate(const fastjet::PseudoJet& psJet) {
+double px = psJet.px();
+double py = psJet.py();
+double pz = psJet.pz();
+double energy = psJet.E();
+math::XYZTLorentzVector vec;
+vec.SetPxPyPzE(px, py, pz, energy);
+reco::LeafCandidate candidate;
+candidate.setP4(vec);
+return candidate;
+}
+
+//convert Candidate to Pseudojet
+fastjet::PseudoJet convertCandidateToPseudoJet(const reco::LeafCandidate& candJet) {
+double px = candJet.px();
+double py = candJet.py();
+double pz = candJet.pz();
+double energy = candJet.energy();
+fastjet::PseudoJet pseudoJet(px, py, pz, energy);
+return pseudoJet;
+}
+
+//convert candidate to TLorentzVector
+TLorentzVector convertCandidateToTLorentz(const reco::LeafCandidate& candJet) {
+double px = candJet.px();
+double py = candJet.py();
+double pz = candJet.pz();
+double energy = candJet.energy();
+TLorentzVector TLV(px, py, pz, energy);
+return TLV;
+}
 
 
 jetAnalyzer::jetAnalyzer(const edm::ParameterSet& iConfig)
@@ -94,6 +140,7 @@ jetAnalyzer::jetAnalyzer(const edm::ParameterSet& iConfig)
    tree->Branch("nAK8particle", &nAK8particle, "nAK8particle/I");
    tree->Branch("nCOMparticle", &nCOMparticle, "nCOMparticle/I");
 
+
    tree->Branch("event_HT", &event_HT, "event_HT/D"); //the "D" is because this is a double type.
 
    tree->Branch("AK8_pt", AK8_pt, "AK8_pt[nAK8]/D");
@@ -108,6 +155,12 @@ jetAnalyzer::jetAnalyzer(const edm::ParameterSet& iConfig)
    tree->Branch("COM_py", COM_py, "COM_py[nCOMparticle]/D");
    tree->Branch("COM_pz", COM_pz, "COM_pz[nCOMparticle]/D");
    tree->Branch("COM_E", COM_E, "COM_E[nCOMparticle]/D");
+
+   tree->Branch("recluster_multiplicity", &recluster_multiplicity, "recluster_multiplicity/I");
+   tree->Branch("recluster_energy", recluster_energy, "recluster_energy[recluster_multiplicity]/D");
+   tree->Branch("recluster_mass", recluster_mass, "recluster_mass[recluster_multiplicity]/D");
+ 
+   tree->Branch("sortMass", &sortMass);
 
 }
 
@@ -138,13 +191,13 @@ void jetAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
    {
       pat::Jet Jet(*iJet);
       //std::cout <<"is iJet PF Jet: " <<iJet->isPFJet()<<",   is Jet PF Jet:  " << Jet.isPFJet() << std::endl;
-      if (Jet.isPFJet() == 0) {std::cout << Jet.eta() <<std::endl; } 
+      //if (Jet.isPFJet() == 0) {std::cout << Jet.eta() <<std::endl; } 
       if (!Jet.isPFJet()) continue;
       if( (Jet.pt() < 300.) || (abs(Jet.eta()) > 2.5) ) continue;   //make a cut to AK8 jets
-      std::cout << "passed AK8 Jet cut" << std::endl;
+      //std::cout << "passed AK8 Jet cut" << std::endl;
 
       if( (Jet.neutralHadronEnergyFraction() >= 0.90) || (Jet.neutralEmEnergyFraction() >= 0.90) || (Jet.muonEnergyFraction() >= 0.80) || (Jet.chargedHadronEnergyFraction() <= 0) || (Jet.chargedEmEnergyFraction() >= 0.80) || (Jet.chargedMultiplicity() <= 0)  || (Jet.numberOfDaughters() <= 1) ) continue;    //jet ID
-      std::cout << "passed Jet ID cut" << std::endl;
+      //std::cout << "passed Jet ID cut" << std::endl;
 
       AK8_mass[nAK8] = Jet.mass(); // save some quantities of the large jets
       AK8_pt[nAK8] = Jet.pt();
@@ -213,12 +266,135 @@ void jetAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
         COM_E[nCOMparticle] = Boosted.E();
   
         nCOMparticle++;
-     }
+     } 
+   } //end of jet loops in an event
+ 
+   //reclustering COM boosted jets  
+   int nom = 0;
+   for (const auto& vec : COM4vectors)
+   {
+      fastjet::PseudoJet pseudojet(vec.Px(), vec.Py(), vec.Pz(), vec.E());
+      PseudoJetvectors.push_back(pseudojet);
+      nom++;
+      //std::cout<< "pseudojet pushback"<< nom <<std::endl;
    }
+   double R0 = 0.8;
+   fastjet::JetDefinition jet_def0(fastjet::cambridge_algorithm, R0);
+   fastjet::ClusterSequence cs_jet0(PseudoJetvectors, jet_def0);  // first parameter = fastjet::PseudoJet vector w/ COM frame particles
+   std::vector<fastjet::PseudoJet> jetsFJ_jet0 = fastjet::sorted_by_E(cs_jet0.inclusive_jets(10.)); // get the new jets clustered this way and sort them by energy, setting a 10 GeV minimum value for jets     
+   recluster_multiplicity = jetsFJ_jet0.size();  //counting number of reclustered jets in the event 
+   for (unsigned int i =0 ; i < jetsFJ_jet0.size(); i++)
+   {
+      if (jetsFJ_jet0[i].m()>50) 
+      {
+      recluster_mass[i] = jetsFJ_jet0[i].m();
+      recluster_energy[i] = jetsFJ_jet0[i].E();
+      }
+   }
+  
+   //convert the pseudojet to candidate
+   std::vector<reco::LeafCandidate> CandVec;
+   for (const auto& PSjet : jetsFJ_jet0)
+      {reco::LeafCandidate jet = convertPseudoJetToCandidate(PSjet);
+      CandVec.push_back(jet);
+      }
+
+   //calculate the thrust axis in the boosted frame.
+   math::XYZVector thrustAxis = Thrust(CandVec.begin(), CandVec.end()).axis();
+
+   //calculate the jet angle with the thrust axis and sort them with negative and positive cosine
+   for (const auto& jet : CandVec)
+      {
+      math::XYZVector jetMom(jet.px(), jet.py(), jet.pz());
+      double dotProd = jetMom.Dot(thrustAxis);
+      double jetMag = jetMom.R();
+      double thrustMag = thrustAxis.R();
+      double cos = dotProd / (jetMag*thrustMag);
+      TLorentzVector TLVjet = convertCandidateToTLorentz(jet);  
+      if (cos > 0.5)
+         {
+         superjet_pos.push_back(TLVjet);
+         }
+      else if (cos < -0.5)
+         {
+         superjet_neg.push_back(TLVjet);
+         }
+      else
+         {
+         leftoverjet.push_back(TLVjet);
+         }
+      }
+
+   //sorting the leftover jets into SuperJet pos/neg with mass
+   std::vector<TLorentzVector> posSuperJet;
+   std::vector<TLorentzVector> negSuperJet;
+   if(leftoverjet.size() > 0)
+   {
+   sortJets testing(superjet_pos, superjet_neg, leftoverjet);
+   posSuperJet = testing.finalSuperJet1;
+   negSuperJet = testing.finalSuperJet2;
+   }
+   else
+   {
+   posSuperJet = superjet_pos;
+   negSuperJet = superjet_neg;
+   }
+ 
+   //sum of the mass of each superjets
+   TLorentzVector posSum(0, 0, 0, 0);
+   TLorentzVector negSum(0, 0, 0, 0);
+   for (unsigned int i = 0; i < posSuperJet.size(); i++)
+   {
+   //std::cout<<"positive super jet: "<<posSuperJet[i].E()<<std::endl;
+   posSum += posSuperJet[i];
+   }
+   for (unsigned int i = 0; i < negSuperJet.size(); i++)
+   {
+   //std::cout<<"negative super jet: "<<negSuperJet[i].E()<<std::endl;
+   negSum += negSuperJet[i];
+   }
+
+   if(posSum.E() > 0)
+   {
+   sortMass.push_back(posSum.E());
+   }
+   if(negSum.E() > 0)
+   {
+   sortMass.push_back(negSum.E());
+   }
+
+
    //here you've reached the end of the event, so this will create a new entry in your tree (representing the event) and fills the branches you created above.
    tree->Fill();
+   //empty the vectors and arrays
+   particle4vectors.clear();
+   COM4vectors.clear();
+   PseudoJetvectors.clear();
+   sortMass.clear();
+   posSuperJet.clear();
+   negSuperJet.clear();
+   superjet_pos.clear();
+   superjet_neg.clear();
+   leftoverjet.clear();
+   sortMass.clear();
+   for (int i = 0; i < 100; ++i)
+   {AK8_pt[i] = 0;
+    AK8_eta[i] = 0;
+    AK8_mass[i] = 0;
+   }
+   for (int i = 0; i < 1000; ++i)
+   {PUPPI_px[i] = 0;
+    PUPPI_py[i] = 0;
+    PUPPI_pz[i] = 0;
+    PUPPI_E[i] = 0;
+    COM_px[i] = 0;
+    COM_py[i] = 0;
+    COM_pz[i] = 0;
+    COM_E[i] = 0;
+    recluster_energy[i] = 0;
+    recluster_mass[i] = 0;
+   }
 
-  
 }
 DEFINE_FWK_MODULE(jetAnalyzer);
 

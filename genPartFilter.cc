@@ -229,6 +229,7 @@ genPartFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
    int nH   = 0;
    int nhq  = 0;
    int nSuub = 0;
+   int nSuu_W =0;
    int nZ    = 0;
    int nZq   = 0;
    int nTopb = 0;
@@ -242,6 +243,13 @@ genPartFilter::filter(edm::Event& iEvent, const edm::EventSetup& iSetup)
    int ntop_ = 0;
    int nH_   = 0;
    int nZ_    = 0;
+//checking processes in that one event
+   int event_HtHt = 0;
+   int event_WbHt = 0;
+   int event_WbZt = 0;
+   int event_WbWb = 0;
+   int event_HtZt = 0;
+   int event_ZtZt = 0;
 
 
 
@@ -277,7 +285,7 @@ if ((abs(iG->pdgId()) == 25) && (abs(iG->mother()->pdgId()) == chi_pdgid)) nH_++
 if ((abs(iG->pdgId())==24)&&((abs(iG->mother()->pdgId())==chi_pdgid)) )
       {
          genChiWb.push_back( TLorentzVector(iG->mother()->px(),iG->mother()->py(),iG->mother()->pz(),iG->mother()->energy())  );
-         const reco::Candidate* W_final = parse_chain(iG->clone());
+         const reco::Candidate* W_final = parse_chain(iG->clone()); //parse chain returns the end of status of the same particle
          for (unsigned int iii=0; iii<W_final->numberOfDaughters(); iii++)
          {
             const reco::Candidate* W_daughter = W_final->daughter(iii);
@@ -288,7 +296,7 @@ if ((abs(iG->pdgId())==24)&&((abs(iG->mother()->pdgId())==chi_pdgid)) )
             }
          }
 
-         nW++;
+         nSuu_W++;
       }
       else if ( (abs(iG->pdgId()) == 5) && (abs(iG->mother()->pdgId()) == chi_pdgid)  )
       {
@@ -417,60 +425,66 @@ if ((abs(iG->pdgId())==24)&&((abs(iG->mother()->pdgId())==chi_pdgid)) )
    //nEvents++;
 
    //if      ( (nChi<2) || (nSuu < 1) ) return; //don't want anything to do with these bad events anyways 
-   if      ((nH == 2) && (nSuub == 0) && (nTopb >= 2) && ( (nhq+nhGlu+nhWq+nhZq) == 4) && (nWq == 4) && (nZq == 0) && (ntop == 2) && (nW == 2)  && (nZ == 0))
+   if      ((nH == 2) && (nSuub == 0) && (nTopb >= 2) && ( (nhWq+nhZq == 8) || (nhq == 4) || (nhGlu ==4) || (nhWq+nhZq == 4 && nhq ==2) || (nhWq+nhZq == 4 && nhGlu ==2) || (nhq == 2 && nhGlu == 2)) && (nWq == 4) && (nZq == 0) && (ntop == 2) && (nW == 2)  && (nZ == 0))
    {
       _htht = true; 
       nHtHt++;
+      event_HtHt++;
    } 
    else if ((nH == 0) && (nSuub == 0) && (nTopb >= 2) && ( (nhq+nhGlu+nhWq+nhZq) == 0) && (nWq == 4) && (nZq == 4) && (ntop == 2) && (nW == 2)  && (nZ == 2))
    {
       _ZtZt = true;
       nZtZt++;
+      event_ZtZt++;
    } 
-   else if ((nH == 0) && (nSuub == 2) && (nTopb >= 0) && ( (nhq+nhGlu+nhWq+nhZq) == 0) && (nWq == 4) && (nZq == 0) && (ntop == 0) && (nW == 2)  && (nZ == 0))
+   else if ((nH == 0) && (nSuub == 2) && (nTopb >= 0) && ( (nhq+nhGlu+nhWq+nhZq) == 0) && (nWq == 4) && (nZq == 0) && (ntop == 0) && (nSuu_W == 2)  && (nZ == 0))
    {
       _WbWb = true;
       nWbWb++;
+      event_WbWb++;
    } 
-   else if ((nH == 1) && (nSuub == 1) && (nTopb >= 1) && ( (nhq+nhGlu+nhWq+nhZq) == 2) && (nWq == 4) && (nZq == 0) && (ntop == 1) && (nW == 2)  && (nZ == 0))
+   else if ((nH == 1) && (nSuub == 1) && (nTopb >= 1) && ( (nhWq+nhZq == 4) || (nhq == 2) || (nhGlu ==2) ) && (nWq == 4) && (nZq == 0) && (ntop == 1) && (nW == 1) && (nSuu_W == 1) && (nZ == 0))
    {
       _htWb = true;
       nWbHt++;
+      event_WbHt++;
    }
-   else if ((nH == 0) && (nSuub == 1) && (nTopb >= 1) && ( (nhq+nhGlu+nhWq+nhZq) == 0) && (nWq == 4) && (nZq == 2) && (ntop == 1) && (nW == 2)  && (nZ == 1))
+   else if ((nH == 0) && (nSuub == 1) && (nTopb >= 1) && ( (nhq+nhGlu+nhWq+nhZq) == 0) && (nWq == 4) && (nZq == 2) && (ntop == 1) && (nW == 1) && (nSuu_W == 1)  && (nZ == 1))
    {
       _ZtWb = true;
       nWbZt++;
+      event_WbZt++;
    }
-   else if ((nH == 1) && (nSuub == 0) && (nTopb >= 2) && ( (nhq+nhGlu+nhWq+nhZq) == 2) && (nWq == 4) && (nZq == 2) && (ntop == 2) && (nW == 2)  && (nZ == 1))
+   else if ((nH == 1) && (nSuub == 0) && (nTopb >= 2) && ( (nhWq+nhZq == 4) || (nhq == 2) || (nhGlu ==2) ) && (nWq == 4) && (nZq == 2) && (ntop == 2) && (nW == 2)  && (nZ == 1))
    { 
       _htZt = true;
       nHtZt++;
+      event_HtZt++;
    } 
 
-   else if ((nSuub_ == 2) && (nW_ == 2))
+   if ((nSuub_ == 2) && (nW_ == 2))
    {
       incWbWb++;
    }
 
-   else if ((nSuub_ == 1) && (nW_ == 1) && (nZ_ == 1) && (ntop_ ==1))
+   if ((nSuub_ == 1) && (nW_ == 1) && (nZ_ == 1) && (ntop_ ==1))
    {
       incWbZt++;
    }
-   else if ((nSuub_ == 1) && (nW_ == 1) && (nH_ == 1) && (ntop_ ==1))
+   if ((nSuub_ == 1) && (nW_ == 1) && (nH_ == 1) && (ntop_ ==1))
    {
       incWbHt++;
    }
-   else if ((nZ_ == 2) && (ntop_ ==2))
+   if ((nZ_ == 2) && (ntop_ ==2))
    {
       incZtZt++;
    }
 
-   else if ((nH_ == 2) && (ntop_ ==2))
+   if ((nH_ == 2) && (ntop_ ==2))
    {
       incHtHt++;
    }
-   else if ((nZ_ == 1) && (ntop_ ==2) && (nH_ == 1))
+   if ((nZ_ == 1) && (ntop_ ==2) && (nH_ == 1))
    {
       incHtZt++;
    }
@@ -479,7 +493,7 @@ if ((abs(iG->pdgId())==24)&&((abs(iG->mother()->pdgId())==chi_pdgid)) )
    total++;
 
      
-  // std::cout << "nHtHt " << nHtHt<< " nWbWb "<< nWbWb<< " nZtZt " << nZtZt<< " nWbHt " << nWbHt<< " nWbZt " << nWbZt<< " nHtZt" << nHtZt <<"total:"<<total<< std::endl;
+   std::cout << "nHtHt " << event_HtHt<< " nWbWb "<< event_WbWb<< " nZtZt " << event_ZtZt<< " nWbHt " << event_WbHt<< " nWbZt " << event_WbZt<< " nHtZt" << event_HtZt << std::endl;
   /* 
    //if ( (nH==0)&&(ntop>0)    )
    //{
@@ -503,7 +517,7 @@ if ((abs(iG->pdgId())==24)&&((abs(iG->mother()->pdgId())==chi_pdgid)) )
       }
     */
   // }
-   //std::cout << " nChi " << nChi<< " ntop "<< ntop<< " nH  " <<nH << " nZ " << nZ << " nSuub " << nSuub <<" nhWq  " <<nhWq << " nhZq " << nhZq << " nhq " << nhq <<  std::endl;
+std::cout << " nChi " << nChi<< " ntop "<< ntop<< " nW " << nW << " nH  " <<nH << " nZ " << nZ << " nSuub " << nSuub <<" nhWq  " <<nhWq << " nhZq " << nhZq << " nhq " << nhq << " nWq " << nWq << " nZq " << nZq <<  std::endl;
 
 /*  
    if      ((nH == 2) && (nSuub >= 0) && (ntop == 2) && (nW == 2)  && (nZ == 0))

@@ -26,7 +26,8 @@
 #include "DataFormats/PatCandidates/interface/PackedTriggerPrescales.h"
 #include "PhysicsTools/CandUtils/interface/Thrust.h"
 #include <TTree.h>
-#include <TCanvas.h>
+#include <TH2D.h>
+#include <TH1D.h>
 #include <TF1.h>
 #include <TGraph.h>
 #include <cmath>
@@ -45,6 +46,7 @@
 #include "DataFormats/Candidate/interface/LeafCandidate.h"
 #include "/uscms/home/hwchung/nobackup/testAnalysis/CMSSW_10_6_29/src/sortJets.h"
 #include <TCanvas.h>
+#include "TH2.h"
 using namespace reco;
 
 
@@ -74,7 +76,16 @@ private:
    int recluster_multiplicity;
    double recluster_energy[1000], recluster_mass[1000];
     
-   std::vector<double> sortMass;    
+   double sortMass[2];    
+ 
+   double posSJ_mass;
+   double negSJ_mass;
+   double posSJ_nAK8;
+   double negSJ_nAK8;
+   double pos_presort_mass;
+   double neg_presort_mass;
+   double misc_presort_mass;
+
 
    //create a vector for 4 vectors
    std::vector<TLorentzVector> particle4vectors;
@@ -83,6 +94,14 @@ private:
    std::vector<TLorentzVector> superjet_pos;
    std::vector<TLorentzVector> superjet_neg;  
    std::vector<TLorentzVector> leftoverjet;
+
+  //create some plots of jet mass
+  TH2D* pos_vs_neg_mass;
+  TH2D* pos_vs_neg_nAK8;
+  TH1D* pos_presort;
+  TH1D* neg_presort;
+  TH1D* misc_presort;
+
 
 };
 
@@ -160,7 +179,16 @@ jetAnalyzer::jetAnalyzer(const edm::ParameterSet& iConfig)
    tree->Branch("recluster_energy", recluster_energy, "recluster_energy[recluster_multiplicity]/D");
    tree->Branch("recluster_mass", recluster_mass, "recluster_mass[recluster_multiplicity]/D");
  
-   tree->Branch("sortMass", &sortMass);
+   tree->Branch("sortMass", sortMass, "sortMass[2]/D");
+
+   tree->Branch("posSJ_mass", &posSJ_mass, "posSJ_mass/D");
+   tree->Branch("negSJ_mass", &negSJ_mass, "negSJ_mass/D");
+   tree->Branch("posSJ_nAK8", &posSJ_nAK8, "posSJ_nAK8/D");
+   tree->Branch("negSJ_nAK8", &negSJ_nAK8, "negSJ_nAK8/D");
+   tree->Branch("pos_presort_mass", &pos_presort_mass, "pos_presort_mass/D");
+   tree->Branch("neg_presort_mass", &neg_presort_mass, "neg_presort_mass/D");
+   tree->Branch("misc_presort_mass", &misc_presort_mass, "misc_presort_mass/D");
+
 
 }
 
@@ -186,6 +214,17 @@ void jetAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
    nAK8 = 0;
    nAK8particle = 0;
    nCOMparticle = 0;
+
+//register TFileService
+edm::Service<TFileService> fileService;
+
+//create histograms using TFileService
+pos_vs_neg_mass = fileService->make<TH2D>("pos_vs_neg_mass", "pos SJ mass vs negative SJ mass", 4000, 0, 4000, 4000, 0, 4000);
+pos_vs_neg_nAK8 = fileService->make<TH2D>("pos_vs_neg_nAK8", "pos SJ nAK8 vs negative SJ nAK8", 4000, 0, 4000, 4000, 0, 4000);
+pos_presort = fileService->make<TH1D>("pos_presort", "pos SJ mass before sortmass", 4000, 0, 4000);
+neg_presort =fileService->make<TH1D>("neg_presort", "neg SJ mass before sortmass", 4000, 0, 4000);
+misc_presort = fileService->make<TH1D>("misc_presort", "misc SJ mass before sortmass", 4000, 0, 4000);
+
 
    for(auto iJet = fatJets->begin(); iJet != fatJets->end(); iJet++)         ////////Over AK8 Jets
    {
@@ -214,7 +253,7 @@ void jetAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
      double pxSum = 0;
      double pySum = 0;
      double pzSum = 0;
-     double massSum = 0;
+     double ESum = 0;
      
      //get the number of daughters
      unsigned int numDaughters = iJet->numberOfDaughters();
@@ -229,7 +268,7 @@ void jetAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
         pxSum += (parti->px())*puppiweight;
         pySum += (parti->py())*puppiweight;
         pzSum += (parti->pz())*puppiweight;
-        massSum += (parti->energy())*puppiweight;
+        ESum += (parti->energy())*puppiweight;
 
      
         //storing weighted PUPPI 4 vec in array
@@ -244,30 +283,34 @@ void jetAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
 
      //calculate COM 4vector
      TLorentzVector COM; //velocity of COM
-     COM.SetPxPyPzE(pxSum/massSum, pySum/massSum, pzSum/massSum, 1);
+     COM.SetPxPyPzE(pxSum/ESum, pySum/ESum, pzSum/ESum, 1);
    
      for (unsigned int i = 0; i < numDaughters; ++i)
      {
         const reco::Candidate* parti = iJet->daughter(i);
-        TLorentzVector Boosted;
-        const pat::PackedCandidate* candParti = (pat::PackedCandidate*) parti; //type casting to use puppi weight method
-        double puppiweight = candParti->puppiWeight();
-        double newpx = (parti->px())*puppiweight-(parti->energy())*puppiweight*(COM.Px()); //px' = px-m*V_c
-        double newpy = (parti->py())*puppiweight-(parti->energy())*puppiweight*(COM.Py()); //px' = px-m*V_c
-        double newpz = (parti->pz())*puppiweight-(parti->energy())*puppiweight*(COM.Pz()); //px' = px-m*V_c
-        double newE = (parti->energy())*puppiweight;
-        Boosted.SetPxPyPzE(newpx, newpy, newpz, newE);
-        COM4vectors.push_back(Boosted);
+        //TLorentzVector Boosted;
+        //const pat::PackedCandidate* candParti = (pat::PackedCandidate*) parti; //type casting to use puppi weight method
+        //double puppiweight = candParti->puppiWeight();
+        //double newpx = (parti->px())*puppiweight-(parti->energy())*puppiweight*(COM.Px()); //px' = px-m*V_c
+        //double newpy = (parti->py())*puppiweight-(parti->energy())*puppiweight*(COM.Py()); //px' = px-m*V_c
+        //double newpz = (parti->pz())*puppiweight-(parti->energy())*puppiweight*(COM.Pz()); //px' = px-m*V_c
+        //double newE = (parti->energy())*puppiweight;
+       
+        //Boosted.SetPxPyPzE(newpx, newpy, newpz, newE);
+        
+	TLorentzVector Tparti(parti->px(), parti->py(), parti->pz(), parti->energy());
+	Tparti.Boost(-COM.X(), -COM.Y(), -COM.Z());
+        COM4vectors.push_back(Tparti);
 
         //storing boosted COM 4 vec in array
-        COM_px[nCOMparticle] = Boosted.Px();
-        COM_py[nCOMparticle] = Boosted.Py();
-        COM_pz[nCOMparticle] = Boosted.Pz();
-        COM_E[nCOMparticle] = Boosted.E();
+        COM_px[nCOMparticle] = Tparti.Px();
+        COM_py[nCOMparticle] = Tparti.Py();
+        COM_pz[nCOMparticle] = Tparti.Pz();
+        COM_E[nCOMparticle] = Tparti.E();
   
         nCOMparticle++;
      } 
-   } //end of jet loops in an event
+   //end of jet loops in an event >> i moved a baket that was here so pur it back if it doesn't work
  
    //reclustering COM boosted jets  
    int nom = 0;
@@ -311,11 +354,11 @@ void jetAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
       double thrustMag = thrustAxis.R();
       double cos = dotProd / (jetMag*thrustMag);
       TLorentzVector TLVjet = convertCandidateToTLorentz(jet);  
-      if (cos > 0.5)
+      if (cos > 0.8)
          {
          superjet_pos.push_back(TLVjet);
          }
-      else if (cos < -0.5)
+      else if (cos < -0.8)
          {
          superjet_neg.push_back(TLVjet);
          }
@@ -324,6 +367,33 @@ void jetAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
          leftoverjet.push_back(TLVjet);
          }
       }
+
+   //calculating mass of pos/neg/misc jets before sortMass for check up
+   TLorentzVector posSum_preSort(0, 0, 0, 0);
+   TLorentzVector negSum_preSort(0, 0, 0, 0);
+   TLorentzVector miscSum_preSort(0, 0, 0, 0);
+   for (unsigned int i = 0; i < superjet_pos.size(); i++)
+   {
+   posSum_preSort += superjet_pos[i];
+   }
+   for (unsigned int i = 0; i < superjet_neg.size(); i++)
+   {
+   negSum_preSort += superjet_neg[i];
+   }
+   for (unsigned int i = 0; i < leftoverjet.size(); i++)
+   {
+   miscSum_preSort += leftoverjet[i];
+   }
+
+   //fill in hist of mass pre sortMass
+   pos_presort->Fill(posSum_preSort.M());
+   neg_presort->Fill(negSum_preSort.M());
+   misc_presort->Fill(miscSum_preSort.M());
+   //fill in the branch
+   pos_presort_mass = posSum_preSort.M();
+   neg_presort_mass = negSum_preSort.M();
+   misc_presort_mass = miscSum_preSort.M();
+
 
    //sorting the leftover jets into SuperJet pos/neg with mass
    std::vector<TLorentzVector> posSuperJet;
@@ -354,15 +424,25 @@ void jetAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
    negSum += negSuperJet[i];
    }
 
-   if(posSum.E() > 0)
+   if(posSum.M() > 0)
    {
-   sortMass.push_back(posSum.E());
+   sortMass[0] = posSum.M();
    }
-   if(negSum.E() > 0)
+   if(negSum.M() > 0)
    {
-   sortMass.push_back(negSum.E());
+   sortMass[1] = negSum.M();
    }
 
+   
+   //make TH2D of mass of pos/neg superjet
+   pos_vs_neg_mass->Fill(posSum.M(), negSum.M());
+   //make TH2D of number of AK8 jets in each pos/neg superjet
+   pos_vs_neg_nAK8->Fill(posSuperJet.size(), negSuperJet.size());
+   //Fill branches
+   posSJ_mass = posSum.M();
+   negSJ_mass = negSum.M();
+   posSJ_nAK8 = posSuperJet.size();
+   negSJ_nAK8 = negSuperJet.size();
 
    //here you've reached the end of the event, so this will create a new entry in your tree (representing the event) and fills the branches you created above.
    tree->Fill();
@@ -370,13 +450,14 @@ void jetAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
    particle4vectors.clear();
    COM4vectors.clear();
    PseudoJetvectors.clear();
-   sortMass.clear();
    posSuperJet.clear();
    negSuperJet.clear();
    superjet_pos.clear();
    superjet_neg.clear();
    leftoverjet.clear();
-   sortMass.clear();
+   sortMass[0] = 0;
+   sortMass[1] = 0;
+
    for (int i = 0; i < 100; ++i)
    {AK8_pt[i] = 0;
     AK8_eta[i] = 0;
@@ -396,5 +477,19 @@ void jetAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
    }
 
 }
+
+
+
+//clean up
+delete pos_vs_neg_mass;
+delete pos_vs_neg_nAK8;
+delete pos_presort;
+delete neg_presort;
+delete misc_presort;
+
+
+}
+
+
 DEFINE_FWK_MODULE(jetAnalyzer);
 

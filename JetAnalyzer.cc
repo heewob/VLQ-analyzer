@@ -96,11 +96,11 @@ private:
    std::vector<TLorentzVector> leftoverjet;
 
   //create some plots of jet mass
-  TH2D* pos_vs_neg_mass;
-  TH2D* pos_vs_neg_nAK8;
-  TH1D* pos_presort;
-  TH1D* neg_presort;
-  TH1D* misc_presort;
+  //TH2D* pos_vs_neg_mass;
+  //TH2D* pos_vs_neg_nAK8;
+  //TH1D* pos_presort;
+  //TH1D* neg_presort;
+  //TH1D* misc_presort;
 
 
 };
@@ -214,17 +214,22 @@ void jetAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetu
    nAK8 = 0;
    nAK8particle = 0;
    nCOMparticle = 0;
+   event_HT = 0;
 
 //register TFileService
 edm::Service<TFileService> fileService;
 
 //create histograms using TFileService
-pos_vs_neg_mass = fileService->make<TH2D>("pos_vs_neg_mass", "pos SJ mass vs negative SJ mass", 4000, 0, 4000, 4000, 0, 4000);
-pos_vs_neg_nAK8 = fileService->make<TH2D>("pos_vs_neg_nAK8", "pos SJ nAK8 vs negative SJ nAK8", 4000, 0, 4000, 4000, 0, 4000);
-pos_presort = fileService->make<TH1D>("pos_presort", "pos SJ mass before sortmass", 4000, 0, 4000);
-neg_presort =fileService->make<TH1D>("neg_presort", "neg SJ mass before sortmass", 4000, 0, 4000);
-misc_presort = fileService->make<TH1D>("misc_presort", "misc SJ mass before sortmass", 4000, 0, 4000);
+//pos_vs_neg_mass = fileService->make<TH2D>("pos_vs_neg_mass", "pos SJ mass vs negative SJ mass", 4000, 0, 4000, 4000, 0, 4000);
+//pos_vs_neg_nAK8 = fileService->make<TH2D>("pos_vs_neg_nAK8", "pos SJ nAK8 vs negative SJ nAK8", 4000, 0, 4000, 4000, 0, 4000);
+//pos_presort = fileService->make<TH1D>("pos_presort", "pos SJ mass before sortmass", 4000, 0, 4000);
+//neg_presort =fileService->make<TH1D>("neg_presort", "neg SJ mass before sortmass", 4000, 0, 4000);
+//misc_presort = fileService->make<TH1D>("misc_presort", "misc SJ mass before sortmass", 4000, 0, 4000);
 
+   double pxSum = 0;
+   double pySum = 0;
+   double pzSum = 0;
+   double ESum = 0;
 
    for(auto iJet = fatJets->begin(); iJet != fatJets->end(); iJet++)         ////////Over AK8 Jets
    {
@@ -232,28 +237,30 @@ misc_presort = fileService->make<TH1D>("misc_presort", "misc SJ mass before sort
       //std::cout <<"is iJet PF Jet: " <<iJet->isPFJet()<<",   is Jet PF Jet:  " << Jet.isPFJet() << std::endl;
       //if (Jet.isPFJet() == 0) {std::cout << Jet.eta() <<std::endl; } 
       if (!Jet.isPFJet()) continue;
-      if( (Jet.pt() < 300.) || (abs(Jet.eta()) > 2.5) ) continue;   //make a cut to AK8 jets
+      //if( (Jet.pt() < 150.) || (abs(Jet.eta()) > 2.5) ) continue;   //make a cut to AK8 jets (pt<300, eta> 2.5)
+      if (abs(Jet.eta()) > 2.5)  continue; //try not using pt cut
       //std::cout << "passed AK8 Jet cut" << std::endl;
 
       if( (Jet.neutralHadronEnergyFraction() >= 0.90) || (Jet.neutralEmEnergyFraction() >= 0.90) || (Jet.muonEnergyFraction() >= 0.80) || (Jet.chargedHadronEnergyFraction() <= 0) || (Jet.chargedEmEnergyFraction() >= 0.80) || (Jet.chargedMultiplicity() <= 0)  || (Jet.numberOfDaughters() <= 1) ) continue;    //jet ID
       //std::cout << "passed Jet ID cut" << std::endl;
-
+     
+      //std::cout<<"aK8 jets passed the jet ID cut: "<<Jet.mass()<<std::endl;
       AK8_mass[nAK8] = Jet.mass(); // save some quantities of the large jets
       AK8_pt[nAK8] = Jet.pt();
       AK8_eta[nAK8] = Jet.eta();
+
+      //add all the HT in the event
+      event_HT += Jet.pt();
+      
 
       if(nAK8<2)
       {
          LeadingAK8Jets+=TLorentzVector(iJet->px(),iJet->py(),iJet->pz(),iJet->energy());
       }
 
+      //std::cout << "AK8 jet before boost: " << "(" << iJet->px() << ", " << iJet->py() << ", " << iJet->pz() << ", " << iJet->energy() << ")" <<std::endl;
       nAK8++;
 
-     //look at the particles in the jet and find COM
-     double pxSum = 0;
-     double pySum = 0;
-     double pzSum = 0;
-     double ESum = 0;
      
      //get the number of daughters
      unsigned int numDaughters = iJet->numberOfDaughters();
@@ -265,7 +272,9 @@ misc_presort = fileService->make<TH1D>("misc_presort", "misc SJ mass before sort
         double puppiweight = candParti->puppiWeight();
         TLorentzVector weighted4vec((parti->px())*puppiweight, (parti->py())*puppiweight, (parti->pz())*puppiweight, (parti->energy())*puppiweight);
         particle4vectors.push_back(weighted4vec);
-        pxSum += (parti->px())*puppiweight;
+
+	//sum over all particles in an event to calculate com vector to boost
+        pxSum += (parti->px())*puppiweight;  
         pySum += (parti->py())*puppiweight;
         pzSum += (parti->pz())*puppiweight;
         ESum += (parti->energy())*puppiweight;
@@ -280,11 +289,26 @@ misc_presort = fileService->make<TH1D>("misc_presort", "misc SJ mass before sort
         nAK8particle++;  
         //std::cout << "nAK8particle++" << nAK8particle << std::endl;
      }
+   } //looped over all jets
+
+//if (nAK8 < 3) return; //break the event loop if the event has less than 3 AK8 jets
 
      //calculate COM 4vector
      TLorentzVector COM; //velocity of COM
      COM.SetPxPyPzE(pxSum/ESum, pySum/ESum, pzSum/ESum, 1);
    
+//loop over all jets again to boost them
+
+  for(auto iJet = fatJets->begin(); iJet != fatJets->end(); iJet++)         ////////Over AK8 Jets
+  {
+     pat::Jet Jet(*iJet);
+     if (!Jet.isPFJet()) continue;
+     //if( (Jet.pt() < 150.) || (abs(Jet.eta()) > 2.5) ) continue;   //make a cut to AK8 jets
+     if (abs(Jet.eta()) > 2.5) continue;
+     if( (Jet.neutralHadronEnergyFraction() >= 0.90) || (Jet.neutralEmEnergyFraction() >= 0.90) || (Jet.muonEnergyFraction() >= 0.80) || (Jet.chargedHadronEnergyFraction() <= 0) || (Jet.chargedEmEnergyFraction() >= 0.80) || (Jet.chargedMultiplicity() <= 0)  || (Jet.numberOfDaughters() <= 1) ) continue;    //jet ID
+
+     unsigned int numDaughters = iJet->numberOfDaughters();
+
      for (unsigned int i = 0; i < numDaughters; ++i)
      {
         const reco::Candidate* parti = iJet->daughter(i);
@@ -300,6 +324,7 @@ misc_presort = fileService->make<TH1D>("misc_presort", "misc SJ mass before sort
         
 	TLorentzVector Tparti(parti->px(), parti->py(), parti->pz(), parti->energy());
 	Tparti.Boost(-COM.X(), -COM.Y(), -COM.Z());
+        //std::cout<< "Boost   X: " << COM.X()<< ", Y: "<< COM.Y()<< ", Z: "<< COM.Z() <<std::endl;
         COM4vectors.push_back(Tparti);
 
         //storing boosted COM 4 vec in array
@@ -309,8 +334,8 @@ misc_presort = fileService->make<TH1D>("misc_presort", "misc SJ mass before sort
         COM_E[nCOMparticle] = Tparti.E();
   
         nCOMparticle++;
-     } 
-   //end of jet loops in an event >> i moved a baket that was here so pur it back if it doesn't work
+     }
+  } //end of jet boost loop 
  
    //reclustering COM boosted jets  
    int nom = 0;
@@ -328,11 +353,12 @@ misc_presort = fileService->make<TH1D>("misc_presort", "misc SJ mass before sort
    recluster_multiplicity = jetsFJ_jet0.size();  //counting number of reclustered jets in the event 
    for (unsigned int i =0 ; i < jetsFJ_jet0.size(); i++)
    {
-      if (jetsFJ_jet0[i].m()>50) 
-      {
+      //std::cout<<"reclustered fastjet mass: "<<jetsFJ_jet0[i].m()<<std::endl;  
+      //std::cout << "reclustered fastjet: " << "(" << jetsFJ_jet0[i].px() << ", " << jetsFJ_jet0[i].py() << ", " << jetsFJ_jet0[i].pz() << ", " << jetsFJ_jet0[i].E() << ")" <<std::endl;
+
       recluster_mass[i] = jetsFJ_jet0[i].m();
       recluster_energy[i] = jetsFJ_jet0[i].E();
-      }
+      
    }
   
    //convert the pseudojet to candidate
@@ -374,21 +400,30 @@ misc_presort = fileService->make<TH1D>("misc_presort", "misc SJ mass before sort
    TLorentzVector miscSum_preSort(0, 0, 0, 0);
    for (unsigned int i = 0; i < superjet_pos.size(); i++)
    {
+   //std::cout<<"presort- positive super jet mass: "<<superjet_pos[i].M()<<std::endl;
+   //std::cout<<"presort- positive super jet: ("<<superjet_pos[i].Px() << ", " << superjet_pos[i].Py() << ", " << superjet_pos[i].Pz() << ", " <<  superjet_pos[i].E() << ")"  <<std::endl;
+
    posSum_preSort += superjet_pos[i];
    }
    for (unsigned int i = 0; i < superjet_neg.size(); i++)
    {
+   //std::cout<<"presort- negative super jet mass: "<<superjet_neg[i].M()<<std::endl;
+   //std::cout<<"presort- negative super jet: (" << superjet_neg[i].Px() << ", " << superjet_neg[i].Py() << ", " << superjet_neg[i].Pz() << ", " <<  superjet_neg[i].E() << ")" <<std::endl;
+
    negSum_preSort += superjet_neg[i];
    }
    for (unsigned int i = 0; i < leftoverjet.size(); i++)
    {
+   //std::cout<<"presort- misc super jet mass: "<<leftoverjet[i].M()<<std::endl;
+   //std::cout<<"presort- misc super jet: ("<< leftoverjet[i].Px() << ", " << leftoverjet[i].Py() << ", " << leftoverjet[i].Pz() << ", " <<  leftoverjet[i].E() << ")"  <<std::endl;
+
    miscSum_preSort += leftoverjet[i];
    }
 
    //fill in hist of mass pre sortMass
-   pos_presort->Fill(posSum_preSort.M());
-   neg_presort->Fill(negSum_preSort.M());
-   misc_presort->Fill(miscSum_preSort.M());
+   //pos_presort->Fill(posSum_preSort.M());
+   //neg_presort->Fill(negSum_preSort.M());
+   //misc_presort->Fill(miscSum_preSort.M());
    //fill in the branch
    pos_presort_mass = posSum_preSort.M();
    neg_presort_mass = negSum_preSort.M();
@@ -415,29 +450,36 @@ misc_presort = fileService->make<TH1D>("misc_presort", "misc SJ mass before sort
    TLorentzVector negSum(0, 0, 0, 0);
    for (unsigned int i = 0; i < posSuperJet.size(); i++)
    {
-   //std::cout<<"positive super jet: "<<posSuperJet[i].E()<<std::endl;
+   //std::cout<<"positive super jet mass: "<<posSuperJet[i].M()<<std::endl;
+   //std::cout<<"positive super jet: ("<< posSuperJet[i].Px() << ", " << posSuperJet[i].Py() << ", " << posSuperJet[i].Pz() << ", " <<  posSuperJet[i].E() << ")"  <<std::endl;
+
    posSum += posSuperJet[i];
    }
    for (unsigned int i = 0; i < negSuperJet.size(); i++)
    {
-   //std::cout<<"negative super jet: "<<negSuperJet[i].E()<<std::endl;
+   //std::cout<<"negative super jet mass: "<<negSuperJet[i].M()<<std::endl;
+   //std::cout<<"negative super jet: ("<< negSuperJet[i].Px() << ", " << negSuperJet[i].Py() << ", " << negSuperJet[i].Pz() << ", " <<  negSuperJet[i].E() << ")" <<std::endl;
+
    negSum += negSuperJet[i];
    }
 
    if(posSum.M() > 0)
    {
    sortMass[0] = posSum.M();
+   //std::cout<<"SUM - pos super jet mass:"<<posSum.M()<<std::endl;
+
    }
    if(negSum.M() > 0)
    {
    sortMass[1] = negSum.M();
+   //std::cout<<"SUM - neg super jet: "<<negSum.M()<<std::endl;
    }
 
    
    //make TH2D of mass of pos/neg superjet
-   pos_vs_neg_mass->Fill(posSum.M(), negSum.M());
+   //pos_vs_neg_mass->Fill(posSum.M(), negSum.M());
    //make TH2D of number of AK8 jets in each pos/neg superjet
-   pos_vs_neg_nAK8->Fill(posSuperJet.size(), negSuperJet.size());
+   //pos_vs_neg_nAK8->Fill(posSuperJet.size(), negSuperJet.size());
    //Fill branches
    posSJ_mass = posSum.M();
    negSJ_mass = negSum.M();
@@ -476,16 +518,16 @@ misc_presort = fileService->make<TH1D>("misc_presort", "misc SJ mass before sort
     recluster_mass[i] = 0;
    }
 
-}
+//}
 
 
 
 //clean up
-delete pos_vs_neg_mass;
-delete pos_vs_neg_nAK8;
-delete pos_presort;
-delete neg_presort;
-delete misc_presort;
+//delete pos_vs_neg_mass;
+//delete pos_vs_neg_nAK8;
+//delete pos_presort;
+//delete neg_presort;
+//delete misc_presort;
 
 
 }
